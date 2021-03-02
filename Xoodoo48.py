@@ -11,7 +11,7 @@
 
 # [03/2021] Modified by Anna Guinet to implement a one-round Xoodoo on a state of 48 bits.
 
-# import sys
+import sys
 
 len_z = 4  # num of bits in lane
 len_s = 48 # num of bits in state
@@ -58,6 +58,7 @@ class Xoodoo:
         A[0][0] = A[0][0] ^ rc
 
         # χ
+        # B = State(bytearray(b'\x00\x00\x00\x00\x00\x00'))
         B = State()
         B[0] = ~A[1] & A[2]
         B[1] = ~A[2] & A[0]
@@ -69,9 +70,6 @@ class Xoodoo:
         A[2] = CyclicShiftPlane(A[2], 2, 8)
 
         return A
-
-# def load32(b):
-#     return sum((b[i] << (8 * i)) for i in range(4))
 
 def not4(b, length=4):
     """ Bitwise NOT in Python for 4 bits by default. """
@@ -127,11 +125,31 @@ def CyclicShiftPlane(A, dx, dz):
 
     return p
 
-def load4b(data, num):
+# def load32(byte):
+#     """
+#     bytearray to int (little endianness)
+#     """
+#     return= int.from_bytes(byte, byteorder='little')
+
+# def load4b(data, num):
+#     """  
+#     Access 4 bits at num-th position in data.
+#     """
+#     return bin(int(data, 2) >> num & 0b1111)
+
+def load4(b):
     """ 
-    Access 4 bits at num-th position in data.
+    Convert 4-bit binary in integer.
     """
-    return bin(int(data, 2) >> num & 0b1111)
+    return int(b, 2)
+
+def format_state(byte):
+    """ 
+    Display 6 bytes in 48 bits with leading zeros.
+    """
+    data = int.from_bytes(byte, byteorder=sys.byteorder)
+    out  = format(data, '048b')
+    return out
 
 class State:
     """
@@ -143,9 +161,8 @@ class State:
         if state is None:
             state = bytearray(6)
 
-        state = bin(int.from_bytes(state, byteorder='big')) # 'big' endianness, or 'little' (sys.byteorder)
-
-        self.planes = [Plane([int(load4b(state, 4*(x+4*y)), 2) for x in range(4)]) for y in range(3)]
+        state = format_state(state)
+        self.planes = [Plane([load4(state[4*(x+4*y):4*(x+4*y)+4]) for x in range(4)]) for y in range(3)]
 
     def __getitem__(self, i):
         return self.planes[i]
@@ -157,29 +174,37 @@ class State:
         return ' '.join(str(x) for x in self.planes)
 
 xp = Xoodoo()
-A  = State()
 
-# test
-K = State(bytearray(b'\x00\x01\x00\x00\x00\x00'))
-M = State(bytearray(b'\x00\x01\x00\x00\x00\x01'))
+A  = State(bytearray(b'\x00\x00\x00\x00\x00\x00'))
 
+print('\n----------\n')
+print('Plane 0: ', A.planes[0])
+print('Plane 1: ', A.planes[1])
+print('Plane 2: ', A.planes[2])
 print()
-print(M.planes[0])
-print(M.planes[1])
-print(M.planes[2])
-print('----')
 
-KM = State()
-print(KM.planes[0])
-print(KM.planes[1])
-print(KM.planes[2])
-print('----')
 
-for y in range(3):
-    KM.planes[y] = K[y] ^ M[y]
-print(KM.planes[0])
-print(KM.planes[1])
-print(KM.planes[2])
+# # test
+# K = State(bytearray(b'\x00\x01\x00\x00\x00\x00'))
+# M = State(bytearray(b'\x00\x01\x00\x00\x00\x01'))
+
+# print()
+# print(M.planes[0])
+# print(M.planes[1])
+# print(M.planes[2])
+# print('----')
+
+# KM = State()
+# print(KM.planes[0])
+# print(KM.planes[1])
+# print(KM.planes[2])
+# print('----')
+
+# for y in range(3):
+#     KM.planes[y] = K[y] ^ M[y]
+# print(KM.planes[0])
+# print(KM.planes[1])
+# print(KM.planes[2])
 
 for i in range(len_s): A = xp.Permute(A, nb_r)
 
