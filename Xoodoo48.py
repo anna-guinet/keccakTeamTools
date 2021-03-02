@@ -11,10 +11,11 @@
 
 # [03/2021] Modified by Anna Guinet to implement a one-round Xoodoo on a state of 48 bits.
 
-import sys
+# import sys
 
-len_z = 4
-len_s = 48
+len_z = 4  # num of bits in lane
+len_s = 48 # num of bits in state
+nb_r  = 1  # num of rounds (default: 12)
 
 class Xoodoo:
     rc_s = []
@@ -53,7 +54,7 @@ class Xoodoo:
 
         # ι
         # rc = (self.rc_p[-i % 7] ^ 0b1000) << self.rc_s[-i % 6]
-        rc = 0b1000
+        rc = 0b1000  # truncate round constant
         A[0][0] = A[0][0] ^ rc
 
         # χ
@@ -144,12 +145,6 @@ class State:
 
         state = bin(int.from_bytes(state, byteorder='big')) # 'big' endianness, or 'little' (sys.byteorder)
 
-        # self.planes = [Plane([int(0)])]
-        # for y in range(3):
-        #     for x in range(4): 
-        #         lane = load4b(state, 4*(x+4*y))
-        #         self.planes = [Plane([int(lane, 2)])]
-
         self.planes = [Plane([int(load4b(state, 4*(x+4*y)), 2) for x in range(4)]) for y in range(3)]
 
     def __getitem__(self, i):
@@ -164,11 +159,7 @@ class State:
 xp = Xoodoo()
 A  = State()
 
-# print()
-# print('Plane 0: ', A.planes[0])
-# print('Plane 1: ', A.planes[1])
-# print('Plane 2: ', A.planes[2])
-
+# test
 K = State(bytearray(b'\x00\x01\x00\x00\x00\x00'))
 M = State(bytearray(b'\x00\x01\x00\x00\x00\x01'))
 
@@ -190,7 +181,7 @@ print(KM.planes[0])
 print(KM.planes[1])
 print(KM.planes[2])
 
-for i in range(48): A = xp.Permute(A, 1)
+for i in range(len_s): A = xp.Permute(A, nb_r)
 
 # print('\n----------\n')
 # print('Plane 0: ', A.planes[0])
