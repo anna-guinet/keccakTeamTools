@@ -9,13 +9,16 @@
 # and related or neighboring rights to the source code in this file.
 # http://creativecommons.org/publicdomain/zero/1.0/
 
-# [03/2021] Modified by Anna Guinet to implement a one-round Xoodoo on a state of 48 bits.
+# [03/2021] Modified by Anna Guinet to add a variation on a state of 48 bits.
 
 import sys
 
-len_z = 4  # num of bits in lane
-len_s = 48 # num of bits in state
-nb_r  = 1  # num of rounds (default: 12)
+# Num of bits in lane (x) and state (s)
+# len_s, len_z = 48, 4
+len_s, len_z = 384, 32
+
+# Num of rounds (default: 12)
+nb_r = 1   
 
 class Xoodoo:
     rc_s = []
@@ -53,12 +56,14 @@ class Xoodoo:
         A[2] = CyclicShiftPlane(A[2], 0, 11)
 
         # ι
-        # rc = (self.rc_p[-i % 7] ^ 0b1000) << self.rc_s[-i % 6]
-        rc = 0b1000  # truncate round constant
+        rc = int()
+        if len_s == 48:
+            rc = 0b1000  # truncate round constant for i = 0
+        if len_s > 48:
+            rc = (self.rc_p[-i % 7] ^ 0b1000) << self.rc_s[-i % 6]
         A[0][0] = A[0][0] ^ rc
 
         # χ
-        # B = State(bytearray(b'\x00\x00\x00\x00\x00\x00'))
         B = State()
         B[0] = ~A[1] & A[2]
         B[1] = ~A[2] & A[0]
@@ -71,9 +76,11 @@ class Xoodoo:
 
         return A
 
-def not4(b, length=4):
-    """ Bitwise NOT in Python for 4 bits by default. """
-    return (1 << length) - 1 - b
+def not_lane(b, n):
+    """
+    Bitwise NOT in Python for n bits by default. 
+    """
+    return (1 << n) - 1 - b
 
 def ReduceX(x):
     return ((x % 4) + 4) % 4
@@ -90,6 +97,9 @@ def CyclicShiftLane(a, dz):
         return ((a >> (len_z - (dz % len_z))) | (a << (dz % len_z))) % (1 << len_z)
 
 class Plane:
+    """
+    Define Xoodoo plane of 4 lanes.
+    """
     lanes = []
 
     def __init__(self, lanes = None):
@@ -104,7 +114,10 @@ class Plane:
         self.lanes[i] = v
 
     def __str__(self):
-        return ' '.join("0b{:04b}".format(x) for x in self.lanes)
+        if len_s == 48:
+            return ' '.join("0b{:04b}".format(x) for x in self.lanes)  # 4 bits
+        if len_s > 48:
+            return ' '.join("0x{:08x}".format(x) for x in self.lanes)  # 1 byte
 
     def __xor__(self, other):
         return Plane([self.lanes[x] ^ other.lanes[x] for x in range(4)])
@@ -114,7 +127,7 @@ class Plane:
 
     def __invert__(self):
         """ bitwise NOT """
-        return Plane([not4(self.lanes[x]) for x in range(4)]) 
+        return Plane([not_lane(self.lanes[x], len_z) for x in range(4)]) 
 
 def CyclicShiftPlane(A, dx, dz):
     p = Plane()
@@ -125,17 +138,11 @@ def CyclicShiftPlane(A, dx, dz):
 
     return p
 
-# def load32(byte):
-#     """
-#     bytearray to int (little endianness)
-#     """
-#     return= int.from_bytes(byte, byteorder='little')
-
-# def load4b(data, num):
-#     """  
-#     Access 4 bits at num-th position in data.
-#     """
-#     return bin(int(data, 2) >> num & 0b1111)
+def load32(byte):
+    """
+    bytearray to int (little endianness)
+    """
+    return int.from_bytes(byte, byteorder='little')
 
 def load4(b):
     """ 
@@ -143,12 +150,12 @@ def load4(b):
     """
     return int(b, 2)
 
-def format_state(byte):
+def format_state(byte, n):
     """ 
-    Display 6 bytes in 48 bits with leading zeros.
+    Display 6 bytes in n bits with leading zeros.
     """
-    data = int.from_bytes(byte, byteorder=sys.byteorder)
-    out  = format(data, '048b')
+    data = int.from_bytes(byte, byteorder='little')
+    out  = format(data, '0%sb' % n)
     return out
 
 class State:
@@ -159,10 +166,14 @@ class State:
 
     def __init__(self, state = None):
         if state is None:
-            state = bytearray(6)
+            state = bytearray(len_s // 8)
 
-        state = format_state(state)
-        self.planes = [Plane([load4(state[4*(x+4*y):4*(x+4*y)+4]) for x in range(4)]) for y in range(3)]
+        if len_s == 48:  # 4 bits
+            state = format_state(state, len_s)
+            self.planes = [Plane([load4(state[4*(x+4*y):4*(x+4*y)+4]) for x in range(4)]) for y in range(3)]
+        
+        if len_s > 48:   # bytes
+            self.planes = [Plane([load32(state[4*(x+4*y):4*(x+4*y)+4]) for x in range(4)]) for y in range(3)]
 
     def __getitem__(self, i):
         return self.planes[i]
@@ -174,42 +185,44 @@ class State:
         return ' '.join(str(x) for x in self.planes)
 
 xp = Xoodoo()
+A  = State()
+# A = State(bytearray(b'\x01\x10\x01\x11\x01\x11\x11\x10\x00\x01\x11\x01\x10\x11\x01\x00\x00\x01\x10\x11\x01\x10\x10\x00\x01\x11\x01\x10\x11\x00\x11\x01\x11\x01\x11\x10\x00\x01\x11\x01\x10\x01\x11\x01\x10\x00\x01\x11'))
 
-A  = State(bytearray(b'\x00\x00\x00\x00\x00\x00'))
+"""
+# test
+print('\nM')
+M = State(bytearray(b'\x00\x01\x00\xff\x00\x01'))
+print(M.planes[2])
+print(M.planes[1])
+print(M.planes[0])
+print('----')
 
-print('\n----------\n')
-print('Plane 0: ', A.planes[0])
-print('Plane 1: ', A.planes[1])
-print('Plane 2: ', A.planes[2])
+print('\nK\n')
+K = State(bytearray(b'\xff\x01\x00\x00\x00\x00'))
+print(K.planes[2])
+print(K.planes[1])
+print(K.planes[0])
+print('----')
+
+print('\nKM')
+KM = State()
+for y in range(3):
+    KM.planes[y] = K[y] ^ M[y]
+print(KM.planes[2])
+print(KM.planes[1])
+print(KM.planes[0])
 print()
+"""
 
-
-# # test
-# K = State(bytearray(b'\x00\x01\x00\x00\x00\x00'))
-# M = State(bytearray(b'\x00\x01\x00\x00\x00\x01'))
-
-# print()
-# print(M.planes[0])
-# print(M.planes[1])
-# print(M.planes[2])
-# print('----')
-
-# KM = State()
-# print(KM.planes[0])
-# print(KM.planes[1])
-# print(KM.planes[2])
-# print('----')
-
-# for y in range(3):
-#     KM.planes[y] = K[y] ^ M[y]
-# print(KM.planes[0])
-# print(KM.planes[1])
-# print(KM.planes[2])
+print()
+print('Plane 2: ', A.planes[2])
+print('Plane 1: ', A.planes[1])
+print('Plane 0: ', A.planes[0])
 
 for i in range(len_s): A = xp.Permute(A, nb_r)
 
-# print('\n----------\n')
-# print('Plane 0: ', A.planes[0])
-# print('Plane 1: ', A.planes[1])
-# print('Plane 2: ', A.planes[2])
-# print()
+print('\n----------\n')
+print('Plane 0: ', A.planes[2])
+print('Plane 1: ', A.planes[1])
+print('Plane 2: ', A.planes[0])
+print()
