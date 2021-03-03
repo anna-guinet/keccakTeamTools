@@ -13,14 +13,17 @@
 
 import sys
 
-# Num of bits in lane (x) and state (s)
-# len_s, len_z = 48, 4
-len_s, len_z = 384, 32
+# Number of bits in lane (len_z) and state (len_s)
+len_s, len_z = 48, 4
+# len_s, len_z = 384, 32
 
-# Num of rounds (default: 12)
+# Number of rounds (default: 12)
 nb_r = 1   
 
 class Xoodoo:
+    """
+    Define Xoodoo round function.
+    """
     rc_s = []
     rc_p = []
 
@@ -58,7 +61,7 @@ class Xoodoo:
         # ι
         rc = int()
         if len_s == 48:
-            rc = 0b1000  # truncate round constant for i = 0
+            rc = 0b0010  # truncate round constant for i = 0
         if len_s > 48:
             rc = (self.rc_p[-i % 7] ^ 0b1000) << self.rc_s[-i % 6]
         A[0][0] = A[0][0] ^ rc
@@ -117,7 +120,7 @@ class Plane:
         if len_s == 48:
             return ' '.join("0b{:04b}".format(x) for x in self.lanes)  # 4 bits
         if len_s > 48:
-            return ' '.join("0x{:08x}".format(x) for x in self.lanes)  # 1 byte
+            return ' '.join("0x{:08x}".format(x) for x in self.lanes)  # byte
 
     def __xor__(self, other):
         return Plane([self.lanes[x] ^ other.lanes[x] for x in range(4)])
@@ -142,7 +145,7 @@ def load32(byte):
     """
     bytearray to int (little endianness)
     """
-    return int.from_bytes(byte, byteorder='little')
+    return sum((byte[i] << (8 * i)) for i in range(4))
 
 def load4(b):
     """ 
@@ -154,7 +157,7 @@ def format_state(byte, n):
     """ 
     Display 6 bytes in n bits with leading zeros.
     """
-    data = int.from_bytes(byte, byteorder='little')
+    data = int.from_bytes(byte, byteorder=sys.byteorder)
     out  = format(data, '0%sb' % n)
     return out
 
@@ -185,44 +188,51 @@ class State:
         return ' '.join(str(x) for x in self.planes)
 
 xp = Xoodoo()
-A  = State()
-# A = State(bytearray(b'\x01\x10\x01\x11\x01\x11\x11\x10\x00\x01\x11\x01\x10\x11\x01\x00\x00\x01\x10\x11\x01\x10\x10\x00\x01\x11\x01\x10\x11\x00\x11\x01\x11\x01\x11\x10\x00\x01\x11\x01\x10\x01\x11\x01\x10\x00\x01\x11'))
+# A  = State()
 
-"""
-# test
-print('\nM')
-M = State(bytearray(b'\x00\x01\x00\xff\x00\x01'))
-print(M.planes[2])
-print(M.planes[1])
-print(M.planes[0])
-print('----')
 
-print('\nK\n')
-K = State(bytearray(b'\xff\x01\x00\x00\x00\x00'))
-print(K.planes[2])
-print(K.planes[1])
-print(K.planes[0])
-print('----')
+###########################################################
 
-print('\nKM')
-KM = State()
-for y in range(3):
-    KM.planes[y] = K[y] ^ M[y]
-print(KM.planes[2])
-print(KM.planes[1])
-print(KM.planes[0])
+print('\n----- Message\n')
+
+m = 0xcc45e92666d8
+print('hex :', hex(m))
+
+M = State(bytearray(b'\xcc\x45\xe9\x26\x66\xd8')) 
+print('Plane 2: ', M.planes[2])
+print('Plane 1: ', M.planes[1])
+print('Plane 0: ', M.planes[0])
+ 
+
+print('\n----- Key\n')
+
+k = 0x52a78352c6a9
+print('hex :', hex(k))
+
+K = State(bytearray(b'\x52\xa7\x83\x52\xc6\xa9')) 
+print('Plane 2: ', K.planes[2])
+print('Plane 1: ', K.planes[1])
+print('Plane 0: ', K.planes[0])
 print()
-"""
 
-print()
+
+print('\n--------- Before round ---------\n')
+km = hex(k ^ m)  # 0x9ee26a74a071
+print('hex : ', km)
+
+A = State(bytearray(b'\x9e\xe2\x6a\x74\xa0\x71'))
+
 print('Plane 2: ', A.planes[2])
 print('Plane 1: ', A.planes[1])
 print('Plane 0: ', A.planes[0])
 
+###########################################################
+
 for i in range(len_s): A = xp.Permute(A, nb_r)
 
-print('\n----------\n')
+print('\n--------- After round  ---------\n')
 print('Plane 0: ', A.planes[2])
 print('Plane 1: ', A.planes[1])
 print('Plane 2: ', A.planes[0])
+print(A)
 print()
